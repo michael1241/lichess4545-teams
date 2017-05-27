@@ -3,8 +3,9 @@ import random
 import json
 import re
 import time
+import math
 
-infile = open("s7test.json",'r')
+infile = open("s7dataupdate.json",'r')
 playerdata = json.load(infile)
 print "This data was read from file."
 infile.close()
@@ -15,10 +16,11 @@ class Player:
     team = None
     board = None
     req_met = False
-    def __init__(self, name, rating, friends):
+    def __init__(self, name, rating, friends, date):
         self.name = name
         self.rating = rating 
         self.friends = friends
+        self.date = date
     def __repr__(self):
         #return str((self.name, self.rating, self.friends, self.pref_score, self.team))
         #return str((self.name, [friend.name for friend in self.friends], self.pref_score))
@@ -74,14 +76,31 @@ def updateSort(): #based on preference score high to low
     teams.sort(key=lambda team: team.team_pref_score, reverse = False)
 
 #Initial assignment to teams based on rating, boards alternate by descending and ascending rating order for balance.
+
+#Rating order - split all players into 6 near equal length boards - joindate order - trim boards to # teams (x% of total) - rating/reverse rating order for initial team creation.
 players = []
 for player in playerdata:
-    players.append(Player(player['name'], player['rating'], player['friends']))
+    players.append(Player(player['lichess_username'], player['classical_rating'], player['friends'], player['date_created']))
 players.sort(key=lambda player: player.rating, reverse=True)
-num_teams = ((len(players) - (len(players)%12)) / 6)
-print("{0} deleted".format(len(players[num_teams*6:])))
-del players[num_teams*6:]
-players_split = [players[i:i + num_teams] for i in xrange(0, len(players), num_teams)]
+
+avg = len(players) / 6.0
+players_split = []
+last = 0.0
+while last < len(players):
+    players_split.append(players[int(last):int(last + avg)])
+    last += avg
+num_teams = int(math.ceil((len(players_split[0])*0.8)/2.0)*2)
+print num_teams
+
+for board in players_split:
+    board.sort(key=lambda player: player.date)
+    alts = board[num_teams:]
+    print "{0} players are alternates".format(alts)
+    del board[num_teams:]
+    board.sort(key=lambda player: player.rating, reverse=True)
+
+players = sum(players_split,[])
+print players
 
 for board in players_split[1::2]:
     board.reverse()
@@ -171,31 +190,3 @@ for player in players:
 #order teams by average rating and swap an unwanted player from one to the other, if not possible, go in one team on one end
 for team in teams:
     print team
-"""
-total = 0
-for player in players:
-    if player.friends and not set(player.friends).intersection(set(player.team.boards)):
-        total += 1
-        print player
-print total
-total = 0
-for player in players:
-    if player.friends:
-        total += 1
-print total
-total = 0
-for team in teams:
-    print team
-    total += 1
-print total
-total = 0
-req = 0
-for team in teams:
-    total += team.team_pref_score
-print total
-for player in players:
-    req += len(player.friends)
-print req
-for team in teams:
-    print team
-"""
