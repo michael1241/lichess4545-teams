@@ -5,7 +5,7 @@ import re
 import time
 import math
 
-infile = open("s7dataupdate.json",'r')
+infile = open("s7test2.json",'r')
 playerdata = json.load(infile)
 print "This data was read from file."
 infile.close()
@@ -16,11 +16,12 @@ class Player:
     team = None
     board = None
     req_met = False
-    def __init__(self, name, rating, friends, date):
+    def __init__(self, name, rating, friends, date, alt):
         self.name = name
         self.rating = rating 
         self.friends = friends
         self.date = date
+        self.alt = alt
     def __repr__(self):
         #return str((self.name, self.rating, self.friends, self.pref_score, self.team))
         #return str((self.name, [friend.name for friend in self.friends], self.pref_score))
@@ -74,33 +75,53 @@ def updatePref(): #update preference scores
 def updateSort(): #based on preference score high to low
     players.sort(key=lambda player: (player.team.team_pref_score, player.pref_score), reverse = False)
     teams.sort(key=lambda team: team.team_pref_score, reverse = False)
+    
+#NEW PLAN
+#add altpref to player objects
+#split all players into 6 near-equal length boards
+#put alt-prefs into alts for that board
+#put latest joins to fill remaining alt spaces
 
 #Initial assignment to teams based on rating, boards alternate by descending and ascending rating order for balance.
-
 #Rating order - split all players into 6 near equal length boards - joindate order - trim boards to # teams (x% of total) - rating/reverse rating order for initial team creation.
 players = []
 for player in playerdata:
-    players.append(Player(player['lichess_username'], player['classical_rating'], player['friends'], player['date_created']))
+    players.append(Player(player['name'], player['rating'], player['friends'], player['date_created'], player['prefers_alt']))
 players.sort(key=lambda player: player.rating, reverse=True)
 
 avg = len(players) / 6.0
+print len(players)
 players_split = []
 last = 0.0
-while last < len(players):
-    players_split.append(players[int(last):int(last + avg)])
+while round(last) < len(players):
+    players_split.append(players[int(round(last)):int(round(last + avg))])
     last += avg
 num_teams = int(math.ceil((len(players_split[0])*0.8)/2.0)*2)
-print num_teams
 
-for board in players_split:
+alts_split = [[] for i in range(6)]
+
+for n, board in enumerate(players_split):
+    for player in board:
+        if player.alt:
+            alts_split[n].append(player)
+#alts = sum(alts_split,[])
+for n, board in enumerate(alts_split):
+    for alt in board:
+        #players.remove(alt)
+        players_split[n].remove(alt)
+
+for n, board in enumerate(players_split):
     board.sort(key=lambda player: player.date)
     alts = board[num_teams:]
-    print "{0} players are alternates".format(alts)
+    for p in alts:
+        alts_split[n].append(p)
     del board[num_teams:]
     board.sort(key=lambda player: player.rating, reverse=True)
 
 players = sum(players_split,[])
-print players
+print len(players)
+print num_teams
+print alts_split
 
 for board in players_split[1::2]:
     board.reverse()
@@ -116,7 +137,10 @@ for n, board in enumerate(players_split):
 
 #Convert players' friends from name to references of the friend's player object
 for player in players:
-    player.friends = re.split("[^a-zA-Z0-9]+", player.friends)
+    if player.friends:
+        player.friends = re.split("[^a-zA-Z0-9]+", player.friends)
+    else:
+        player.friends = []
 for player in players:
     temp_friends = []
     for friend in player.friends:
@@ -144,13 +168,7 @@ def testSwap(teama, playera, teamb, playerb, board):
     swapPlayers(teama, playerb, teamb, playera, board) #swap players back
     updatePref()
     return post_pref - prior_pref #more positive = better swap
-"""
-total = 0
-for team in teams:
-    total += team.team_pref_score
-print total
-"""
-#PLAN
+
 #take player from least happy team. calculate the overall preference score if player were to swap to each of the preferences' teams or preference swaps into their team.
 #swap player into the team that makes the best change to overall preference
 #check if the swap has increased the OVERALL preference rating - need overall pref function
@@ -186,7 +204,9 @@ while p<len(players):
 
 for player in players:
     player.setReqMet()
-#add rating balancing at the end to swap players with no preference
-#order teams by average rating and swap an unwanted player from one to the other, if not possible, go in one team on one end
+
 for team in teams:
     print team
+print "ALTERNATES"
+for board in alts_split:
+    print board
