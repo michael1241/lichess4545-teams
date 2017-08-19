@@ -5,11 +5,11 @@ import re
 import time
 import math
 
-infile = open("s7test2.json",'r')
+# input file is JSON data with the following keys: rating, name, in_slack, account_status, date_created, prefers_alt, friends, has_20_games.
+infile = open("s8data.json",'r')
 playerdata = json.load(infile)
 print "This data was read from file."
 infile.close()
-#print playerdata
 
 class Player:
     pref_score = 0
@@ -23,8 +23,6 @@ class Player:
         self.date = date
         self.alt = alt
     def __repr__(self):
-        #return str((self.name, self.rating, self.friends, self.pref_score, self.team))
-        #return str((self.name, [friend.name for friend in self.friends], self.pref_score))
         return str((self.name, self.board, self.rating, self.req_met))
     def setPrefScore(self):
         self.pref_score = 0
@@ -76,19 +74,13 @@ def updateSort(): #based on preference score high to low
     players.sort(key=lambda player: (player.team.team_pref_score, player.pref_score), reverse = False)
     teams.sort(key=lambda team: team.team_pref_score, reverse = False)
     
-#NEW PLAN
-#add altpref to player objects
-#split all players into 6 near-equal length boards
-#put alt-prefs into alts for that board
-#put latest joins to fill remaining alt spaces
-
-#Initial assignment to teams based on rating, boards alternate by descending and ascending rating order for balance.
-#Rating order - split all players into 6 near equal length boards - joindate order - trim boards to # teams (x% of total) - rating/reverse rating order for initial team creation.
+# put player data into Player objects
 players = []
 for player in playerdata:
     players.append(Player(player['name'], player['rating'], player['friends'], player['date_created'], player['prefers_alt']))
 players.sort(key=lambda player: player.rating, reverse=True)
 
+# splits list of Player objects into 6 near equal lists, sectioned by rating
 avg = len(players) / 6.0
 print len(players)
 players_split = []
@@ -98,18 +90,17 @@ while round(last) < len(players):
     last += avg
 num_teams = int(math.ceil((len(players_split[0])*0.8)/2.0)*2)
 
+# separate preferred alternates into alternates lists
 alts_split = [[] for i in range(6)]
-
 for n, board in enumerate(players_split):
     for player in board:
         if player.alt:
             alts_split[n].append(player)
-#alts = sum(alts_split,[])
 for n, board in enumerate(alts_split):
     for alt in board:
-        #players.remove(alt)
         players_split[n].remove(alt)
 
+# separate latest joining players into alternate lists as required
 for n, board in enumerate(players_split):
     board.sort(key=lambda player: player.date)
     alts = board[num_teams:]
@@ -119,10 +110,11 @@ for n, board in enumerate(players_split):
     board.sort(key=lambda player: player.rating, reverse=True)
 
 players = sum(players_split,[])
-print len(players)
-print num_teams
-print alts_split
+#print len(players)
+#print num_teams
+#print alts_split
 
+# snake draft players into initial teams and update player and team attributes
 for board in players_split[1::2]:
     board.reverse()
 for n, board in enumerate(players_split):
@@ -135,7 +127,7 @@ for n, board in enumerate(players_split):
     for team, player in enumerate(board):
         teams[team].changeBoard(n, player)
 
-#Convert players' friends from name to references of the friend's player object
+# convert players' friends from name to references of the friend's player object
 for player in players:
     if player.friends:
         player.friends = re.split("[^a-zA-Z0-9]+", player.friends)
@@ -145,22 +137,23 @@ for player in players:
     temp_friends = []
     for friend in player.friends:
         for potentialfriend in players:
-            if friend.lower() == potentialfriend.name.lower():
+            if friend.lower() == potentialfriend.name.lower() and potentialfriend not in temp_friends: # prevent duplicated friend error
                 temp_friends.append(potentialfriend)
     player.friends = temp_friends
 for player in players:
     for friend in player.friends:
         if friend.board == player.board:
             player.friends.remove(friend)
-updatePref() #update preference scores
+updatePref()
 updateSort()
 
 def swapPlayers(teama, playera, teamb, playerb, board):
-    #swap players function - ensure players are same board for input
+    #swap players between teams - ensure players are same board for input
     teama.changeBoard(board,playerb)
     teamb.changeBoard(board,playera)
 
 def testSwap(teama, playera, teamb, playerb, board):
+    #try a swap and return the preference change if this swap was made
     prior_pref = teama.team_pref_score + teamb.team_pref_score
     swapPlayers(teama, playera, teamb, playerb, board) #swap players forwards
     updatePref()
@@ -169,37 +162,36 @@ def testSwap(teama, playera, teamb, playerb, board):
     updatePref()
     return post_pref - prior_pref #more positive = better swap
 
-#take player from least happy team. calculate the overall preference score if player were to swap to each of the preferences' teams or preference swaps into their team.
-#swap player into the team that makes the best change to overall preference
-#check if the swap has increased the OVERALL preference rating - need overall pref function
-#if swap made, resort list and start at the least happy team again
-#if no good swaps, go to next player. if end of list reached with no swaps, stop.
+# take player from least happy team
+# calculate the overall preference score if player were to swap to each of the preferences' teams or preference swaps into their team.
+# swap player into the team that makes the best change to overall preference
+# check if the swap has increased the overall preference rating
+# if swap made, resort list by preference score and start at the least happy player again
+# if no improving swaps are available, go to the next player
+# if end of the list reached with no swaps made: stop
+
 p = 0
 while p<len(players):
     player = players[p] #least happy player
     friend_swaps = []
     for friend in player.friends:
         #test both swaps for each friend and whichever is better, add the swap ID and score to temp friends list
-        #print repr(friend.team), friend.board, repr(player.team), player.board
-        #print player.friends, friend
         if friend.board != player.board and friend.team != player.team:
-            #print True
             #test swap friend to player team (swap1)
             swap1_ID = (friend.team, friend, player.team, player.team.getPlayer(friend.board), friend.board)
             swap1_score = testSwap(*swap1_ID)
             #test swap player to friend team (swap2)
             swap2_ID = (player.team, player, friend.team, friend.team.getPlayer(player.board), player.board)
             swap2_score = testSwap(*swap2_ID)
-            #print max((swap1_score, swap1_ID),(swap2_score, swap2_ID))
             friend_swaps.append(max((swap1_score, swap1_ID),(swap2_score, swap2_ID)))
     friend_swaps.sort()
-    if friend_swaps and friend_swaps[-1][0] > 0:
+    if friend_swaps and friend_swaps[-1][0] > 0: # there is a swap to make and it improves the preference score
         swapPlayers(*(friend_swaps[-1][1]))
         print friend_swaps[-1]
         updatePref()
         updateSort()
         p = 0
-    else:
+    else: # go to the next player in the list
         p += 1
 
 for player in players:
