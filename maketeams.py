@@ -4,9 +4,11 @@ import json
 import re
 import time
 import math
+import sys
 
 # input file is JSON data with the following keys: rating, name, in_slack, account_status, date_created, prefers_alt, friends, has_20_games.
-infile = open("s8data.json",'r')
+data = sys.argv[1]
+infile = open(data,'r')
 playerdata = json.load(infile)
 print "This data was read from file."
 infile.close()
@@ -77,7 +79,10 @@ def updateSort(): #based on preference score high to low
 # put player data into Player objects
 players = []
 for player in playerdata:
-    players.append(Player(player['name'], player['rating'], player['friends'], player['date_created'], player['prefers_alt']))
+    if player['has_20_games'] and player['in_slack']:
+        players.append(Player(player['name'], player['rating'], player['friends'], player['date_created'], player['prefers_alt']))
+    else:
+        print "{0} skipped".format(player['name'])
 players.sort(key=lambda player: player.rating, reverse=True)
 
 # splits list of Player objects into 6 near equal lists, sectioned by rating
