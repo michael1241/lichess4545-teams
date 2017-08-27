@@ -35,12 +35,13 @@ class Player:
                 self.pref_score -= 1
         #player with more than 5 choices can be <5 preference even if all teammates are preferred
     def setReqMet(self):
+        self.req_met = False
+        if not self.friends:
+            self.req_met = None
         for friend in self.friends:
             if friend in self.team.getBoards():
                 self.req_met = True
-                friend.req_met = True
-            else:
-                self.req_met = False
+
 class Team:
     def __init__(self):
         self.boards = [None,None,None,None,None,None]
@@ -135,7 +136,7 @@ for n, board in enumerate(players_split):
 # convert players' friends from name to references of the friend's player object
 for player in players:
     if player.friends:
-        player.friends = re.split("[^a-zA-Z0-9]+", player.friends)
+        player.friends = re.split("[^-_a-zA-Z0-9]+", player.friends) # separate friends requests into individual usernames - split on any number of non-(alphanumeric, hyphen or underscore)
     else:
         player.friends = []
 for player in players:
