@@ -5,7 +5,7 @@ import time
 import math
 import sys
 
-# input file is JSON data with the following keys: rating, name, in_slack, account_status, date_created, prefers_alt, friends, has_20_games.
+# input file is JSON data with the following keys: rating, name, in_slack, account_status, date_created, prefers_alt, friends, avoid, has_20_games.
 data = sys.argv[1]
 output = sys.argv[2]
 infile = open(data,'r')
@@ -18,10 +18,11 @@ class Player:
     team = None
     board = None
     req_met = False
-    def __init__(self, name, rating, friends, date, alt):
+    def __init__(self, name, rating, friends, avoid, date, alt):
         self.name = name
         self.rating = rating 
         self.friends = friends
+        self.avoid = avoid
         self.date = date
         self.alt = alt
     def __repr__(self):
@@ -35,6 +36,9 @@ class Player:
                 self.pref_score += 1
             else:
                 self.pref_score -= 1
+        for avoid in self.avoid:
+            if avoid in self.team.getBoards():
+                self.pref_score -= 1        
         #player with more than 5 choices can be <5 preference even if all teammates are preferred
     def setReqMet(self):
         self.req_met = False
@@ -85,7 +89,7 @@ def updateSort(): #based on preference score high to low
 players = []
 for player in playerdata:
     if player['has_20_games'] and player['in_slack']:
-        players.append(Player(player['name'], player['rating'], player['friends'], player['date_created'], player['prefers_alt']))
+        players.append(Player(player['name'], player['rating'], player['friends'], player['avoid'], player['date_created'], player['prefers_alt']))
     else:
         print("{0} skipped".format(player['name']))
 players.sort(key=lambda player: player.rating, reverse=True)
@@ -137,12 +141,14 @@ for n, board in enumerate(players_split):
     for team, player in enumerate(board):
         teams[team].changeBoard(n, player)
 
-# convert players' friends from name to references of the friend's player object
+# convert players' friends and avoid from name to references of the friend's/avoid's player object
 for player in players:
-    if player.friends:
+    if player.friends or player.avoid:
         player.friends = re.split("[^-_a-zA-Z0-9]+", player.friends) # separate friends requests into individual usernames - split on any number of non-(alphanumeric, hyphen or underscore)
+        player.avoid = re.split("[^-_a-zA-Z0-9]+", player.avoid) # separate avoid requests into individual usernames - split on any number of non-(alphanumeric, hyphen or underscore)
     else:
         player.friends = []
+        player.avoid = []
 for player in players:
     temp_friends = []
     for friend in player.friends:
@@ -150,6 +156,15 @@ for player in players:
             if friend.lower() == potentialfriend.name.lower() and potentialfriend not in temp_friends: # prevent duplicated friend error
                 temp_friends.append(potentialfriend)
     player.friends = temp_friends
+
+    temp_avoid = []
+    for avoid in player.avoid:
+        for potentialavoid in players:
+            if avoid.lower() == potentialavoid.name.lower() and potentialavoid not in temp_avoid: # prevent duplicated friend error
+                temp_avoid.append(potentialavoid)
+    player.avoid = temp_avoid
+
+#remove friend requests for same board
 for player in players:
     for friend in player.friends:
         if friend.board == player.board:
@@ -183,21 +198,28 @@ def testSwap(teama, playera, teamb, playerb, board):
 p = 0
 while p<len(players):
     player = players[p] #least happy player
-    friend_swaps = []
+    swaps = []
     for friend in player.friends:
-        #test both swaps for each friend and whichever is better, add the swap ID and score to temp friends list
-        if friend.board != player.board and friend.team != player.team:
+        #test both direction swaps for each friend and whichever is better, add the swap ID and score to temp friends list
+        if friend.board != player.board and friend.team != player.team: #board check is redundant due to earlier removal of same board requests
             #test swap friend to player team (swap1)
             swap1_ID = (friend.team, friend, player.team, player.team.getPlayer(friend.board), friend.board)
             swap1_score = testSwap(*swap1_ID)
             #test swap player to friend team (swap2)
             swap2_ID = (player.team, player, friend.team, friend.team.getPlayer(player.board), player.board)
             swap2_score = testSwap(*swap2_ID)
-            friend_swaps.append(max((swap1_score, swap1_ID),(swap2_score, swap2_ID)))
-    friend_swaps.sort()
-    if friend_swaps and friend_swaps[-1][0] > 0: # there is a swap to make and it improves the preference score
-        swapPlayers(*(friend_swaps[-1][1]))
-        print(friend_swaps[-1])
+            swaps.append(max((swap1_score, swap1_ID),(swap2_score, swap2_ID)))
+    for avoid in player.avoid:
+        #test moving player to be avoided to the best preferred team
+        if player.team == avoid.team: #otherwise irrelevant
+            for swap_team in teams:
+                swap_ID = (avoid.team, avoid, swap_team, swap_team.getPlayer(avoid.board), avoid.board)
+                swap_score = testSwap(*swap_ID)
+                swaps.append((swap_score,swap_ID))
+    swaps.sort()
+    if swaps and swaps[-1][0] > 0: # there is a swap to make and it improves the preference score
+        swapPlayers(*(swaps[-1][1]))
+        print(swaps[-1])
         updatePref()
         updateSort()
         p = 0
@@ -207,10 +229,18 @@ while p<len(players):
 for player in players:
     player.setReqMet()
 
+#WIP for upload format for heltour
 jsonoutput = []
 #[{"action":"change-member","team_number":1,"board_number":1,"player":{"name":"lemonworld","is_captain":false,"is_vice_captain":false}}]
-
-
+for t, team in enumerate(teams):
+    for b, board in enumerate(team.boards):
+        pp = {"action":"change-member","team_number":t+1,"board_number":b+1,"player":{"name":board.name,"is_captain":False,"is_vice_captain":False}}
+        jsonoutput.append(pp)
+for b, board in enumerate(alts_split):
+    print(board)
+    for _, pp in enumerate(board):
+        pp = {"action":"create-alternate","board_number":b+1,"player_name":pp.name}
+        jsonoutput.append(pp)
 
 if output == "readable":
     for team in teams:
@@ -219,4 +249,4 @@ if output == "readable":
     for board in alts_split:
         print(board)
 elif output == "json":
-    pass
+    print(json.dumps(jsonoutput))
