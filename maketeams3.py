@@ -20,7 +20,7 @@ class Player:
     req_met = False
     def __init__(self, name, rating, friends, avoid, date, alt):
         self.name = name
-        self.rating = rating 
+        self.rating = rating
         self.friends = friends
         self.avoid = avoid
         self.date = date
@@ -38,7 +38,7 @@ class Player:
                 self.pref_score -= 1
         for avoid in self.avoid:
             if avoid in self.team.getBoards():
-                self.pref_score -= 1        
+                self.pref_score -= 1
         #player with more than 5 choices can be <5 preference even if all teammates are preferred
     def setReqMet(self):
         self.req_met = False
@@ -84,7 +84,7 @@ def updatePref(): #update preference scores
 def updateSort(): #based on preference score high to low
     players.sort(key=lambda player: (player.team.team_pref_score, player.pref_score), reverse = False)
     teams.sort(key=lambda team: team.team_pref_score, reverse = False)
-    
+
 # put player data into Player objects
 players = []
 for player in playerdata:
