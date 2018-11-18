@@ -11,13 +11,27 @@ class Player:
     team = None
     board = None
     req_met = False
-    def __init__(self, name, rating, friends, avoid, date, alt):
+    def __init__(self, name, rating, friends, avoid, date, alt, previous_season_alt):
         self.name = name
         self.rating = rating
         self.friends = friends
         self.avoid = avoid
         self.date = date
         self.alt = alt
+        self.previous_season_alt = previous_season_alt
+
+    @classmethod
+    def player_from_json(cls, player):
+        return cls(
+            player['name'],
+            player['rating'],
+            player['friends'],
+            player['avoid'],
+            player['date_created'],
+            player['prefers_alt'],
+            player['previous_season_alternate'] == 'alternate'
+        )
+
     def __repr__(self):
         return str((self.name, self.board, self.rating, self.req_met))
     def __lt__(self, other):
@@ -92,7 +106,7 @@ def make_teams(players, output):
     players = []
     for player in playerdata:
         if player['has_20_games'] and player['in_slack']:
-            players.append(Player(player['name'], player['rating'], player['friends'], player['avoid'], player['date_created'], player['prefers_alt']))
+            players.append(Player.player_from_json(player))
         else:
             print("{0} skipped".format(player['name']))
     players.sort(key=lambda player: player.rating, reverse=True)
@@ -122,7 +136,7 @@ def make_teams(players, output):
     # separate latest joining players into alternate lists as required
     alts_split = [[] for x in players_split]
     for n, board in enumerate(players_split):
-        board.sort(key=lambda player: player.date)
+        board.sort(key=lambda player: (0 if player.previous_season_alt else 1, player.date))
         alts_split[n].extend(board[num_teams:])
         del board[num_teams:]
         board.sort(key=lambda player: player.rating, reverse=True)
@@ -272,6 +286,7 @@ def make_teams(players, output):
                 player = team.boards[board_i]
                 short_name = player.name[:20]
                 player_name = f"{short_name} ({player.rating})"
+
                 print(f" {player_name: <27} |", end='')
             print()
         print()
@@ -289,7 +304,12 @@ def make_teams(players, output):
                 player_name = ""
                 if player_i < len(board):
                     player = board[player_i]
-                    player_name = f"{player.name} ({player.rating})"
+                    short_name = player.name
+                    if player.alt:
+                        short_name = "*" + player.name[:19]
+                    else:
+                        short_name = player.name[:20]
+                    player_name = f"{short_name} ({player.rating})"
                 print(f" {player_name: <27} |", end='')
             print()
     elif output == "json":
