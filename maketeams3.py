@@ -97,40 +97,37 @@ def make_teams(players, output):
             print("{0} skipped".format(player['name']))
     players.sort(key=lambda player: player.rating, reverse=True)
 
+    # Split into those that want to be alternates vs those that do not.
+    alternates = [p for p in players if p.alt]
+    players = [p for p in players if not p.alt]
+
     # splits list of Player objects into 6 near equal lists, sectioned by rating
     avg = len(players) / 6.0
-    print(len(players))
     players_split = []
     last = 0.0
     while round(last) < len(players):
         players_split.append(players[int(round(last)):int(round(last + avg))])
         last += avg
 
+
+    min_ratings = [min([p.rating for p in board]) for board in players_split]
+    max_ratings = [max([p.rating for p in board]) for board in players_split]
+    min_ratings[-1] = 0
+    max_ratings[0] = 5000
+    board_bounds = list(zip(min_ratings, max_ratings))
+
     num_teams = int(math.ceil((len(players_split[0])*0.8)/2.0)*2)
-    print(num_teams)
-
-    # separate preferred alternates into alternates lists
-    alts_split = [[] for i in range(6)]
-    for n, board in enumerate(players_split):
-        for player in board:
-            if player.alt:
-                alts_split[n].append(player)
-    for n, board in enumerate(alts_split):
-        for alt in board:
-            players_split[n].remove(alt)
-
-    # ensure the number of teams doesn't exceed the number of players available
-    # on a given board
-    num_teams = min([num_teams] + [len(board) for board in players_split])
+    print(f"Targetting {num_teams} teams")
 
     # separate latest joining players into alternate lists as required
+    alts_split = [[] for x in players_split]
     for n, board in enumerate(players_split):
         board.sort(key=lambda player: player.date)
-        alts = board[num_teams:]
-        for p in alts:
-            alts_split[n].append(p)
+        alts_split[n].extend(board[num_teams:])
         del board[num_teams:]
         board.sort(key=lambda player: player.rating, reverse=True)
+    for n, (min_rating, max_rating) in enumerate(board_bounds):
+        alts_split[n].extend([p for p in alternates if p.rating >= min_rating and p.rating < max_rating])
 
     players = sum(players_split,[])
     #print len(players)
@@ -252,12 +249,49 @@ def make_teams(players, output):
             jsonoutput.append(pp)
 
     if output == "readable":
+        print("-{0: <5}--".format("-"*5), end='')
+        for x in range(6):
+            print("-{0: <27}--".format("-"*27), end='')
+        print()
+        print(f"Using: {len(players)} players and {len(alternates)} alternates")
+        for i, (n, x) in enumerate(reversed(board_bounds)):
+            print(f"Board #{i+1} rating range: [{n}, {x})")
         print("TEAMS")
-        for team in teams:
-            print(team)
+        print(" {0: <5} |".format("Team #"), end='')
+        for x in range(6):
+            print(" {0: <27} |".format(f"Board #{x+1}"), end='')
+        print()
+        print("-{0: <5}--".format("-"*5), end='')
+        for x in range(6):
+            print("-{0: <27}--".format("-"*27), end='')
+        print()
+        for team_i in range(num_teams):
+            print(f" #{team_i+1: <5} |", end='')
+            for board_i in range(6):
+                team = teams[team_i]
+                player = team.boards[board_i]
+                short_name = player.name[:20]
+                player_name = f"{short_name} ({player.rating})"
+                print(f" {player_name: <27} |", end='')
+            print()
+        print()
         print("ALTERNATES")
-        for board in alts_split:
-            print(board)
+        for i in range(6):
+            n,x = board_bounds[i]
+            print(" {0: <27} |".format(f"Board #{i+1} [{n},{x})"), end='')
+        print()
+        for x in range(6):
+            print("-{0: <27}--".format("-"*27), end='')
+        print()
+        for player_i in range(max([len(a) for a in alts_split])):
+            for board_i in range(6):
+                board = alts_split[board_i]
+                player_name = ""
+                if player_i < len(board):
+                    player = board[player_i]
+                    player_name = f"{player.name} ({player.rating})"
+                print(f" {player_name: <27} |", end='')
+            print()
     elif output == "json":
         print(json.dumps(jsonoutput))
 
