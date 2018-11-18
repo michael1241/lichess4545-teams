@@ -5,6 +5,7 @@ import re
 import time
 import math
 import sys
+import terminal
 
 class Player:
     pref_score = 0
@@ -93,6 +94,23 @@ def updateSort(players, teams): #based on preference score high to low
     players.sort(key=lambda player: (player.team.team_pref_score, player.pref_score), reverse = False)
     teams.sort(key=lambda team: team.team_pref_score, reverse = False)
 
+def split_into_equal_groups_by_rating(players, group_number):
+    players.sort(key=lambda player: player.rating, reverse=True)
+    avg = len(players) / float(group_number)
+    players_split = []
+    last = 0.0
+    while round(last) < len(players):
+        players_split.append(players[int(round(last)):int(round(last + avg))])
+        last += avg
+    return players_split
+
+def get_rating_bounds_of_split(split):
+    min_ratings = [min([p.rating for p in board]) for board in split]
+    max_ratings = [max([p.rating for p in board]) for board in split]
+    min_ratings[-1] = 0
+    max_ratings[0] = 5000
+    return list(zip(min_ratings, max_ratings))
+
 @click.command()
 @click.option('--output', default="readable", type=click.Choice(['json', 'readable']))
 @click.option('--players', help='the json file containing the players.', required=True)
@@ -116,32 +134,21 @@ def make_teams(players, output):
     players = [p for p in players if not p.alt]
 
     # splits list of Player objects into 6 near equal lists, sectioned by rating
-    avg = len(players) / 6.0
-    players_split = []
-    last = 0.0
-    while round(last) < len(players):
-        players_split.append(players[int(round(last)):int(round(last + avg))])
-        last += avg
-
-
-    min_ratings = [min([p.rating for p in board]) for board in players_split]
-    max_ratings = [max([p.rating for p in board]) for board in players_split]
-    min_ratings[-1] = 0
-    max_ratings[0] = 5000
-    board_bounds = list(zip(min_ratings, max_ratings))
+    players_split = split_into_equal_groups_by_rating(players, 6)
+    team_rating_bounds = get_rating_bounds_of_split(players_split)
 
     num_teams = int(math.ceil((len(players_split[0])*0.8)/2.0)*2)
     print(f"Targetting {num_teams} teams")
 
     # separate latest joining players into alternate lists as required
-    alts_split = [[] for x in players_split]
     for n, board in enumerate(players_split):
         board.sort(key=lambda player: (0 if player.previous_season_alt else 1, player.date))
-        alts_split[n].extend(board[num_teams:])
+        alternates.extend(board[num_teams:])
         del board[num_teams:]
         board.sort(key=lambda player: player.rating, reverse=True)
-    for n, (min_rating, max_rating) in enumerate(board_bounds):
-        alts_split[n].extend([p for p in alternates if p.rating >= min_rating and p.rating < max_rating])
+
+    alts_split = split_into_equal_groups_by_rating(alternates, 6)
+    alt_rating_bounds = get_rating_bounds_of_split(alts_split)
 
     players = sum(players_split,[])
     #print len(players)
@@ -263,54 +270,43 @@ def make_teams(players, output):
             jsonoutput.append(pp)
 
     if output == "readable":
-        print("-{0: <5}--".format("-"*5), end='')
-        for x in range(6):
-            print("-{0: <27}--".format("-"*27), end='')
-        print()
+        terminal.separator()
         print(f"Using: {len(players)} players and {len(alternates)} alternates")
-        for i, (n, x) in enumerate(reversed(board_bounds)):
-            print(f"Board #{i+1} rating range: [{n}, {x})")
+        print(terminal.green(f"Previous Season Alternates"))
+        print(terminal.blue(f"Requested Alternate"))
         print("TEAMS")
-        print(" {0: <5} |".format("Team #"), end='')
-        for x in range(6):
-            print(" {0: <27} |".format(f"Board #{x+1}"), end='')
-        print()
-        print("-{0: <5}--".format("-"*5), end='')
-        for x in range(6):
-            print("-{0: <27}--".format("-"*27), end='')
+        terminal.smallheader("Team #")
+        for i in range(6):
+            n,x = team_rating_bounds[i]
+            terminal.largeheader(f"Board #{i+1} [{n},{x})")
         print()
         for team_i in range(num_teams):
-            print(f" #{team_i+1: <5} |", end='')
+            terminal.smallcol(f"#{team_i+1}")
             for board_i in range(6):
                 team = teams[team_i]
                 player = team.boards[board_i]
                 short_name = player.name[:20]
                 player_name = f"{short_name} ({player.rating})"
-
-                print(f" {player_name: <27} |", end='')
+                terminal.largecol(player_name, terminal.green if player.previous_season_alt else None)
             print()
         print()
         print("ALTERNATES")
+        terminal.smallheader(" ")
         for i in range(6):
-            n,x = board_bounds[i]
-            print(" {0: <27} |".format(f"Board #{i+1} [{n},{x})"), end='')
-        print()
-        for x in range(6):
-            print("-{0: <27}--".format("-"*27), end='')
+            n,x = alt_rating_bounds[i]
+            terminal.largeheader(f"Board #{i+1} [{n},{x})")
         print()
         for player_i in range(max([len(a) for a in alts_split])):
+            terminal.smallcol(" ")
             for board_i in range(6):
                 board = alts_split[board_i]
                 player_name = ""
                 if player_i < len(board):
                     player = board[player_i]
                     short_name = player.name
-                    if player.alt:
-                        short_name = "*" + player.name[:19]
-                    else:
-                        short_name = player.name[:20]
+                    short_name = player.name[:20]
                     player_name = f"{short_name} ({player.rating})"
-                print(f" {player_name: <27} |", end='')
+                terminal.largecol(player_name, terminal.blue if player.alt else None)
             print()
     elif output == "json":
         print(json.dumps(jsonoutput))
