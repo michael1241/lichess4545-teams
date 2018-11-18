@@ -57,8 +57,8 @@ class Player:
                 self.req_met = True
 
 class Team:
-    def __init__(self):
-        self.boards = [None,None,None,None,None,None]
+    def __init__(self, boards):
+        self.boards = [None for x in range(boards)]
     def __str__(self):
         return str((self.boards, self.team_pref_score, self.getMean()))
     def __repr__(self):
@@ -114,7 +114,8 @@ def get_rating_bounds_of_split(split):
 @click.command()
 @click.option('--output', default="readable", type=click.Choice(['json', 'readable']))
 @click.option('--players', help='the json file containing the players.', required=True)
-def make_teams(players, output):
+@click.option('--boards', default=6, help='number of boards per team.')
+def make_teams(players, output, boards):
     # input file is JSON data with the following keys: rating, name, in_slack, account_status, date_created, prefers_alt, friends, avoid, has_20_games.
     with open(players,'r') as infile:
         playerdata = json.load(infile)
@@ -134,7 +135,7 @@ def make_teams(players, output):
     players = [p for p in players if not p.alt]
 
     # splits list of Player objects into 6 near equal lists, sectioned by rating
-    players_split = split_into_equal_groups_by_rating(players, 6)
+    players_split = split_into_equal_groups_by_rating(players, boards)
     team_rating_bounds = get_rating_bounds_of_split(players_split)
 
     num_teams = int(math.ceil((len(players_split[0])*0.8)/2.0)*2)
@@ -147,7 +148,7 @@ def make_teams(players, output):
         del board[num_teams:]
         board.sort(key=lambda player: player.rating, reverse=True)
 
-    alts_split = split_into_equal_groups_by_rating(alternates, 6)
+    alts_split = split_into_equal_groups_by_rating(alternates, boards)
     alt_rating_bounds = get_rating_bounds_of_split(alts_split)
 
     players = sum(players_split,[])
@@ -163,7 +164,7 @@ def make_teams(players, output):
             player.board = n
     teams = []
     for n in range(num_teams):
-        teams.append(Team())
+        teams.append(Team(boards))
     for n, board in enumerate(players_split):
         for team, player in enumerate(board):
             teams[team].changeBoard(n, player)
@@ -276,13 +277,13 @@ def make_teams(players, output):
         print(terminal.blue(f"Requested Alternate"))
         print("TEAMS")
         terminal.smallheader("Team #")
-        for i in range(6):
+        for i in range(boards):
             n,x = team_rating_bounds[i]
             terminal.largeheader(f"Board #{i+1} [{n},{x})")
         print()
         for team_i in range(num_teams):
             terminal.smallcol(f"#{team_i+1}")
-            for board_i in range(6):
+            for board_i in range(boards):
                 team = teams[team_i]
                 player = team.boards[board_i]
                 short_name = player.name[:20]
@@ -292,13 +293,13 @@ def make_teams(players, output):
         print()
         print("ALTERNATES")
         terminal.smallheader(" ")
-        for i in range(6):
+        for i in range(boards):
             n,x = alt_rating_bounds[i]
             terminal.largeheader(f"Board #{i+1} [{n},{x})")
         print()
         for player_i in range(max([len(a) for a in alts_split])):
             terminal.smallcol(" ")
-            for board_i in range(6):
+            for board_i in range(boards):
                 board = alts_split[board_i]
                 player_name = ""
                 if player_i < len(board):
