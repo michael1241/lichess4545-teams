@@ -115,7 +115,8 @@ def get_rating_bounds_of_split(split):
 @click.option('--output', default="readable", type=click.Choice(['json', 'readable']))
 @click.option('--players', help='the json file containing the players.', required=True)
 @click.option('--boards', default=6, help='number of boards per team.')
-def make_teams(players, output, boards):
+@click.option('--balance', default=0.8, help='proportion of all players that will be full time')
+def make_teams(players, output, boards, balance):
     # input file is JSON data with the following keys: rating, name, in_slack, account_status, date_created, prefers_alt, friends, avoid, has_20_games.
     with open(players,'r') as infile:
         playerdata = json.load(infile)
@@ -138,7 +139,7 @@ def make_teams(players, output, boards):
     players_split = split_into_equal_groups_by_rating(players, boards)
     team_rating_bounds = get_rating_bounds_of_split(players_split)
 
-    num_teams = int(math.ceil((len(players_split[0])*0.8)/2.0)*2)
+    num_teams = int(math.ceil((len(players_split[0])*balance)/2.0)*2)
     print(f"Targetting {num_teams} teams")
 
     # separate latest joining players into alternate lists as required
