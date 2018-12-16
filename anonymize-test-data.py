@@ -2,6 +2,7 @@ import click
 import random
 import json
 import re
+from functools import partial
 
 
 @click.command()
@@ -13,13 +14,15 @@ def run(players):
 
     names = [p['name'] for p in players]
     for i, name in enumerate(names):
+        replaceName = 'p{}'.format(i)
+        replaceNameInString = partial(re.sub,
+                                      r"\b{}\b".format(name),
+                                      replaceName)
         for player in players:
-            replaceName = 'p{}'.format(i)
             if player['name'] == name:
                 player['name'] = replaceName
-            player['friends'] = re.sub(r"\b{}\b".format(name),
-                                       replaceName,
-                                       player['friends'])
+            player['friends'] = replaceNameInString(player['friends'])
+            player['avoid'] = replaceNameInString(player['avoid'])
 
     ratings = [player['rating'] for player in players]
     random.shuffle(ratings)
