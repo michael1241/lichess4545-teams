@@ -15,8 +15,9 @@ def run(players):
     names = [p['name'] for p in players]
     for i, name in enumerate(names):
         replaceName = 'p{}'.format(i)
+        boundary = r"[^-_a-zA-Z0-9]"
         replaceNameInString = partial(re.sub,
-                                      r"\b{}\b".format(name),
+                                      r"((?<={1})|^){0}((?={1})|$)".format(name, boundary),
                                       replaceName)
         for player in players:
             if player['name'] == name:
@@ -24,11 +25,23 @@ def run(players):
             player['friends'] = replaceNameInString(player['friends'])
             player['avoid'] = replaceNameInString(player['avoid'])
 
+    def removeJunk(s):
+        pattern = r".*?(p\d+)"
+        s = re.sub(pattern, r" \1", s)
+        s = re.sub(r"\D+$", '', s)
+        s = re.sub(r"^[^p]+", '', s)
+        return s
+
+    for player in players:
+        player['friends'] = removeJunk(player['friends'])
+        player['avoid'] = removeJunk(player['avoid'])
+
     ratings = [player['rating'] for player in players]
     random.shuffle(ratings)
     for player, rating in zip(players, ratings):
         player['rating'] = rating
 
+    print(players)
     print(json.dumps(players, indent=4))
 
 
