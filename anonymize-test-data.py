@@ -24,9 +24,9 @@ def run(players):
         for player in players:
             if player['name'] == name:
                 player['name'] = replaceName
-            if re.search(pattern, player['friends']):
+            if re.search(pattern, player['friends'], re.I):
                 player['new_friends'] = player['new_friends'] + " " + replaceName
-            if re.search(pattern, player['avoid']):
+            if re.search(pattern, player['avoid'], re.I):
                 player['new_avoid'] = player['new_avoid'] + " " + replaceName
 
     for player in players:
